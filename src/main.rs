@@ -1,7 +1,9 @@
 use std::{num::NonZeroU64, str::FromStr};
-use wgpu::{util::DeviceExt, Adapter, Device, Queue};
+use wgpu::{Adapter, Device, Queue, util::DeviceExt};
 
 fn main() {
+    const DO_CAPTURE: bool = true;
+
     let env_args: Vec<f32> = std::env::args()
         .skip(1)
         .map(|s| {
@@ -39,14 +41,21 @@ fn main() {
         panic!("Adapter does not support compute shaders");
     }
 
-    let (device, queue): (Device, Queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: None,
-        required_features: wgpu::Features::empty(),
-        required_limits: wgpu::Limits::downlevel_defaults(),
-        memory_hints: wgpu::MemoryHints::MemoryUsage,
-        trace: wgpu::Trace::Off,
-    }))
-    .expect("failed to create device");
+    let (device, queue): (Device, Queue) =
+        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: None,
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
+            trace: wgpu::Trace::Off,
+        }))
+        .expect("failed to create device");
+
+    if DO_CAPTURE {
+        unsafe {
+            device.start_graphics_debugger_capture();
+        }
+    }
 
     let module = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
@@ -210,6 +219,12 @@ fn main() {
     let data = buffer_slice.get_mapped_range();
     // Convert the data back to a slice of f32.
     let result: &[f32] = bytemuck::cast_slice(&data);
+
+    if DO_CAPTURE {
+        unsafe {
+            device.stop_graphics_debugger_capture();
+        }
+    }
 
     // Print out the result.
     println!("Result: {result:?}");
