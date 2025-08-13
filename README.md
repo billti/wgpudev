@@ -1,44 +1,21 @@
 # WebGPU based quantum state vector simulator
 
-## TODO
+**IMPORTANT: WORK IN PROGRESS** and is not yet functional.
 
-- Run an actual quantum circuit and verify the results for a simple Bell Pair
-- Figure out to do logging and capture on large scale simulations
-- Create the buffers for the state vector and operations list
-- Dispatch workgroups for operations in a loop
-- Run a quantum kernel that can do the math
-- Be able to fetch and display the results
-- See if pollster and flume can be replaced with <https://github.com/rust-lang/futures-rs>
-
-## Next steps
-
-How to represent a list of operations in Rust that can populate the GPU op list.
-
-A vector of some struct seems natural
-bytemuck is the crate to reinterpret bytes of things
-Need to figure out how to override the workgroup size and the op index for each dispatch.
+The project uses the `wgpu` crate to run a quantum state vector simulation using the GPU on native and web platforms.
 
 ## Building the web site
 
-The below requires that wasm-bindgen, wasm-opt, and Node.js are installed and on your PATH.
+The build requires that wasm-bindgen, wasm-opt, and Node.js are installed and on your PATH.
 
-```bash
-# Build the initial wasm binary
-cargo build --lib --target wasm32-unknown-unknown --release
-# Use wasm-bindgen to generate the JavaScript bindings
-wasm-bindgen --target web --out-dir ./target/wasm32/release target/wasm32-unknown-unknown/release/wgpudev.wasm
-# Optimize the wasm binary
-wasm-opt -Oz --enable-bulk-memory --enable-nontrapping-float-to-int --output target/wasm32/release/wgpudev_bg.wasm target/wasm32/release/wgpudev_bg.wasm
-# Copy the generated files from target/wasm32/release to the site/lib directory
-cp target/wasm32/release/* site/lib/
-# To test/view the site (requires Node.js)
-npx http-server
-```
+Run `webdev.sh` to build debug bits for the web. Run `webdev.sh --release` to build release bits.
 
-For debug builds, which will give you useful call stacks in the console, do the below instead:
+Run `npx http-server` to serve the site locally. The repo is also served on the project site at <https://ticehurst.com/wgpudev/>.
 
-```bash
-cargo build --lib --target wasm32-unknown-unknown
-wasm-bindgen --debug --target web --out-dir ./target/wasm32/debug target/wasm32-unknown-unknown/debug/wgpudev.wasm
-cp target/wasm32/debug/* site/lib/
-```
+## TODO
+
+- Add the code to configure and dispatch the correct number of workgroups and threads.
+- Add the code to run the gate operations.
+- Add the code to scan the probabilities and return results over 0.01.
+- Update the web page to provide a circuit and show the results.
+- Figure out to do logging and capture on large scale simulations for debugging.
