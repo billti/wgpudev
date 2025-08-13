@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use pollster::FutureExt;
 use wgpu::{Adapter, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Device, Queue, ShaderModule};
 use circuit::Circuit;
@@ -235,6 +237,8 @@ impl GpuContext {
 
         // Cross-platform readback: async map + native poll
         let buffer_slice = resources.download_buffer.slice(..);
+
+        // Consider using 'futures' if flume has issues or isn't lightweight enough
         let (sender, receiver) = flume::bounded(1);
         buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
             sender.send(()).unwrap();

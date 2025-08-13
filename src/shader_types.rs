@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use bytemuck::{Pod, Zeroable};
 
 pub const MAX_QUBITS_PER_THREAD: u32 = 10;

@@ -2,7 +2,8 @@
 
 ## TODO
 
-- Have a circuit representation
+- Run an actual quantum circuit and verify the results for a simple Bell Pair
+- Figure out to do logging and capture on large scale simulations
 - Create the buffers for the state vector and operations list
 - Dispatch workgroups for operations in a loop
 - Run a quantum kernel that can do the math

@@ -1,9 +1,14 @@
+#![allow(unused)]
+
 mod circuit;
 mod gpu_context;
 mod shader_types;
 
 use circuit::{Circuit, CircuitOp};
 use shader_types::ops;
+
+#[cfg(test)]
+mod tests;
 
 fn main() {
     let mut gpu_context = gpu_context::GpuContext::new();
