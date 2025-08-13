@@ -33,11 +33,9 @@ pub async fn run() -> u32 {
         ],
     };
 
-    wasm_bindgen_futures::spawn_local(async {
-        let mut gpu_context = GpuContext::new().await;
-        gpu_context.create_resources(circ);
-        gpu_context.run().await;
-    });
+    let mut gpu_context = GpuContext::new().await;
+    gpu_context.create_resources(circ);
+    let results = gpu_context.run().await;
 
-    42
+    results.len() as u32
 }
