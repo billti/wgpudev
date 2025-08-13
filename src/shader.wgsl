@@ -58,7 +58,7 @@ var<storage, read> circuitOps: array<f32>;
 @group(0) @binding(2)
 var<storage, read_write> results: array<f32>;
 
-@id(0) override WORKGROUP_SIZE_X: u32 = 64u;
+override WORKGROUP_SIZE_X: u32 = 64;
 
 // Ideal workgroup size depends on the hardware, the workload, and other factors. However, it should
 // _generally_ be a multiple of 64. Common sizes are 64x1x1, 256x1x1; or 8x8x1, 16x16x1 for 2D workloads.

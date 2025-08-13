@@ -1,9 +1,11 @@
 #![allow(unused)]
 
-use pollster::FutureExt;
-use wgpu::{Adapter, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Device, Queue, ShaderModule};
 use circuit::Circuit;
+use futures::FutureExt;
 use std::num::NonZeroU64;
+use wgpu::{
+    Adapter, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Device, Queue, ShaderModule,
+};
 
 use crate::circuit;
 
@@ -28,11 +30,12 @@ struct GpuResources {
 }
 
 impl GpuContext {
-    pub fn new() -> Self {
+    pub async fn new() -> Self {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
-        let adapter: Adapter =
-            pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-                .expect("Failed to create an adapter");
+        let adapter: Adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions::default())
+            .await
+            .expect("Failed to create an adapter");
 
         let downlevel_capabilities = adapter.get_downlevel_capabilities();
         if !downlevel_capabilities
@@ -42,14 +45,15 @@ impl GpuContext {
             panic!("Adapter does not support compute shaders");
         }
 
-        let (device, queue): (Device, Queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        let (device, queue): (Device, Queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::downlevel_defaults(),
                 memory_hints: wgpu::MemoryHints::MemoryUsage,
                 trace: wgpu::Trace::Off,
-            }))
+            })
+            .await
             .expect("failed to create device");
 
         if DO_CAPTURE {
@@ -189,11 +193,11 @@ impl GpuContext {
             results_buffer,
             download_buffer,
             bind_group,
-            circuit
+            circuit,
         });
     }
 
-    pub fn run(&self) -> Vec<u32> {
+    pub async fn run(&self) -> Vec<u32> {
         let resources: &GpuResources = self.resources.as_ref().expect("Resources not initialized");
 
         let mut encoder = self
@@ -238,8 +242,8 @@ impl GpuContext {
         // Cross-platform readback: async map + native poll
         let buffer_slice = resources.download_buffer.slice(..);
 
-        // Consider using 'futures' if flume has issues or isn't lightweight enough
-        let (sender, receiver) = flume::bounded(1);
+        let (sender, receiver) = futures::channel::oneshot::channel();
+
         buffer_slice.map_async(wgpu::MapMode::Read, move |_| {
             sender.send(()).unwrap();
         });
@@ -247,7 +251,7 @@ impl GpuContext {
         // On native, drive the GPU and mapping to completion. No-op on the web (where it automatically polls).
         self.device.poll(wgpu::PollType::Wait).unwrap();
 
-        receiver.recv_async().block_on().expect("Failed to receive map completion");
+        receiver.await.expect("Failed to receive map completion");
 
         // Read, copy out, and unmap.
         let data = buffer_slice.get_mapped_range();

@@ -1,22 +1,20 @@
-#![allow(unused)]
+use crate::circuit::{Circuit, CircuitOp};
+use crate::shader_types::ops;
+use crate::gpu_context::GpuContext;
 
-mod circuit;
-mod gpu_context;
-mod shader_types;
-mod wasm;
+use wasm_bindgen::prelude::*;
 
-use circuit::{Circuit, CircuitOp};
-use shader_types::ops;
+#[wasm_bindgen]
+pub fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
 
-#[cfg(test)]
-mod tests;
-
-fn main() {
+#[wasm_bindgen]
+pub async fn run() -> u32 {
     let circ = Circuit {
         qubit_count: 4,
         ops: vec![
             CircuitOp {
-                
                 op_id: ops::SX,
                 q1: 0,
                 q2: 0,
@@ -35,10 +33,11 @@ fn main() {
         ],
     };
 
-    let result = futures::executor::block_on(async {
-        let mut gpu_context = gpu_context::GpuContext::new().await;
+    wasm_bindgen_futures::spawn_local(async {
+        let mut gpu_context = GpuContext::new().await;
         gpu_context.create_resources(circ);
-        gpu_context.run().await
+        gpu_context.run().await;
     });
-    println!("Result length: {}", result.len());
+
+    42
 }
