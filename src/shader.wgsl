@@ -89,22 +89,22 @@ fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // For the last op, the first thread should scan the probabilities and write the results.
     // TODO: This hits perf running on a single thread. Look to fan it out.
-    // if (op.op_id == MEVERYZ) {
-    //     if (thread_id == 0) {
-    //         var curr_idx = 0u;
-    //         let entry_count = 1u << QUBIT_COUNT;
-    //         for (var i: u32 = 0; i < entry_count; i++) {
-    //             // Calculate the probability of this entry
-    //             let prob = stateVec[i].x * stateVec[i].x + stateVec[i].y * stateVec[i].y;
-    //             if (prob > 0.01) {
-    //                 results[curr_idx].entry_idx = i;
-    //                 results[curr_idx].probability = prob;
-    //                 curr_idx += 1;
-    //             }
-    //         }
-    //     }
-    //     return;
-    // }
+    if (op.op_id == MEVERYZ) {
+        if (thread_id == 0) {
+            var curr_idx = 0u;
+            let entry_count = 1u << QUBIT_COUNT;
+            for (var i: u32 = 0; i < entry_count; i++) {
+                // Calculate the probability of this entry
+                let prob = stateVec[i].x * stateVec[i].x + stateVec[i].y * stateVec[i].y;
+                if (prob > 0.01) {
+                    results[curr_idx].entry_idx = i;
+                    results[curr_idx].probability = prob;
+                    curr_idx += 1;
+                }
+            }
+        }
+        return;
+    }
     // TODO: MZ and MRESETZ (assume base profile with all measurements at the end of the circuit for now)
 
     switch op.op_id {

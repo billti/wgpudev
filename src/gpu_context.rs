@@ -67,13 +67,13 @@ impl GpuContext {
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
-                // required_limits: Limits {
-                //     max_compute_workgroup_size_x: 32,
-                //     max_compute_workgroups_per_dimension: 65535,
-                //     max_storage_buffer_binding_size: buffer_needed,
-                //     ..Default::default()
-                // },
-                required_limits: wgpu::Limits::downlevel_defaults(),
+                required_limits: Limits {
+                    max_compute_workgroup_size_x: 32,
+                    max_compute_workgroups_per_dimension: 65535,
+                    max_storage_buffer_binding_size: buffer_needed,
+                    ..Default::default()
+                },
+                // required_limits: wgpu::Limits::downlevel_defaults(),
                 memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::Off,
             })
