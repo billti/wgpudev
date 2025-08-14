@@ -1,22 +1,22 @@
 /* tslint:disable */
 /* eslint-disable */
-export function add(a: number, b: number): number;
-export function run(): Promise<number>;
+export function add(a: number, c: number): number;
+export function run(code: string): Promise<any[]>;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly add: (a: number, b: number) => number;
-  readonly run: () => any;
+  readonly run: (a: number, b: number) => any;
   readonly __wbindgen_exn_store: (a: number) => void;
   readonly __externref_table_alloc: () => number;
   readonly __wbindgen_export_2: WebAssembly.Table;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export_5: WebAssembly.Table;
-  readonly closure45_externref_shim: (a: number, b: number, c: any) => void;
-  readonly closure69_externref_shim: (a: number, b: number, c: any, d: any) => void;
+  readonly closure48_externref_shim: (a: number, b: number, c: any) => void;
+  readonly closure72_externref_shim: (a: number, b: number, c: any, d: any) => void;
   readonly __wbindgen_start: () => void;
 }
 

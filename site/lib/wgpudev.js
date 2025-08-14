@@ -213,28 +213,31 @@ function debugString(val) {
 }
 /**
  * @param {number} a
- * @param {number} b
+ * @param {number} c
  * @returns {number}
  */
-export function add(a, b) {
-    const ret = wasm.add(a, b);
+export function add(a, c) {
+    const ret = wasm.add(a, c);
     return ret;
 }
 
 /**
- * @returns {Promise<number>}
+ * @param {string} code
+ * @returns {Promise<any[]>}
  */
-export function run() {
-    const ret = wasm.run();
+export function run(code) {
+    const ptr0 = passStringToWasm0(code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.run(ptr0, len0);
     return ret;
 }
 
-function __wbg_adapter_26(arg0, arg1, arg2) {
-    wasm.closure45_externref_shim(arg0, arg1, arg2);
+function __wbg_adapter_30(arg0, arg1, arg2) {
+    wasm.closure48_externref_shim(arg0, arg1, arg2);
 }
 
-function __wbg_adapter_205(arg0, arg1, arg2, arg3) {
-    wasm.closure69_externref_shim(arg0, arg1, arg2, arg3);
+function __wbg_adapter_213(arg0, arg1, arg2, arg3) {
+    wasm.closure72_externref_shim(arg0, arg1, arg2, arg3);
 }
 
 const __wbindgen_enum_GpuBufferBindingType = ["uniform", "storage", "read-only-storage"];
@@ -361,6 +364,10 @@ function __wbg_get_imports() {
         const ret = arg0.getMappedRange(arg1, arg2);
         return ret;
     }, arguments) };
+    imports.wbg.__wbg_get_b9b93047fe3cf45b = function(arg0, arg1) {
+        const ret = arg0[arg1 >>> 0];
+        return ret;
+    };
     imports.wbg.__wbg_gpu_a6bce2913fb8f574 = function(arg0) {
         const ret = arg0.gpu;
         return ret;
@@ -386,6 +393,10 @@ function __wbg_get_imports() {
         const ret = arg0.length;
         return ret;
     };
+    imports.wbg.__wbg_length_e2d2a49132c1b256 = function(arg0) {
+        const ret = arg0.length;
+        return ret;
+    };
     imports.wbg.__wbg_mapAsync_4a34082bad283ccf = function(arg0, arg1, arg2, arg3) {
         const ret = arg0.mapAsync(arg1 >>> 0, arg2, arg3);
         return ret;
@@ -405,7 +416,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wbg_adapter_205(a, state0.b, arg0, arg1);
+                    return __wbg_adapter_213(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -659,6 +670,13 @@ function __wbg_get_imports() {
     imports.wbg.__wbg_unmap_619e40c09473aed0 = function(arg0) {
         arg0.unmap();
     };
+    imports.wbg.__wbindgen_array_new = function() {
+        const ret = [];
+        return ret;
+    };
+    imports.wbg.__wbindgen_array_push = function(arg0, arg1) {
+        arg0.push(arg1);
+    };
     imports.wbg.__wbindgen_cb_drop = function(arg0) {
         const obj = arg0.original;
         if (obj.cnt-- == 1) {
@@ -668,8 +686,8 @@ function __wbg_get_imports() {
         const ret = false;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper805 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 46, __wbg_adapter_26);
+    imports.wbg.__wbindgen_closure_wrapper822 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 49, __wbg_adapter_30);
         return ret;
     };
     imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {
