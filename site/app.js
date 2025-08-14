@@ -10,6 +10,7 @@ async function main() {
     const runButton = /** @type {HTMLButtonElement} */ (document.getElementById("run"));
     const isingButton = /** @type {HTMLButtonElement} */ (document.getElementById("ising"));
     const circuitTextArea = /** @type {HTMLTextAreaElement} */ (document.getElementById("circuit"));
+    const outputCode = /** @type {HTMLElement} */ (document.getElementById("output"));
 
     runButton.addEventListener("click", async () => {
         // Get the circuit from the textarea
@@ -19,8 +20,21 @@ async function main() {
         const startTime = performance.now();
         const result = await run(circuitText);
         const endTime = performance.now();
-        console.log("Results are ", result)
-        console.log(`Circuit executed in ${endTime - startTime} milliseconds`);
+        //console.log("Results are ", result)
+        //console.log(`Circuit executed in ${(endTime - startTime)} milliseconds`);
+
+        var output = `Runtime: ${(endTime - startTime).toFixed(2)} milliseconds\n\n`;
+        for (const [entry_idx, probability] of result) {
+            // Convert the bits in entry_idx to a binary string
+            if (probability < 0.01) {
+                continue; // Skip probabilities less than 0.01%
+            }
+            // Format probability to 2 decimal places
+            const prob_str = (probability * 100).toFixed(4);
+            const binaryString = entry_idx.toString(2).padStart(28, '0'); // Assuming 5 qubits
+            output += `|${binaryString}>: ${prob_str}%\n`;
+        }
+        outputCode.innerHTML = output;
     });
 
     isingButton.addEventListener("click", async () => {
