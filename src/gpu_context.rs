@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use crate::circuit::Circuit;
-use crate::shader_types::Result;
+use crate::shader_types::{Result, Op};
 
 use futures::FutureExt;
 use std::num::NonZeroU64;
@@ -115,6 +115,12 @@ impl GpuContext {
     }
 
     pub fn create_resources(&mut self, circuit: Circuit) {
+        // Assert the the Op size is 256 bytes
+        assert_eq!(
+            std::mem::size_of::<Op>(),
+            256,
+            "Op struct must be 256 bytes for WebGPU dynamic buffer alignment"
+        );
         let state_vector_entries: u64 = 2u64.pow(circuit.qubit_count);
         let result_buffer_size_bytes: u64 = std::mem::size_of::<Result>() as u64 * 100;
 
@@ -181,7 +187,7 @@ impl GpuContext {
                 entry_point: Some("run_statevector_ops"),
                 // When creating the pipeline, override the workgroup size based on the qubit count.
                 compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[("WORKGROUP_SIZE_X", 64.0)], // TODO: Set this based on params
+                    constants: &[("WORKGROUP_SIZE_X", 64.0), ("QUBIT_COUNT", circuit.qubit_count as f64)], // TODO: Set this based on params
                     ..Default::default()
                 },
                 cache: None,

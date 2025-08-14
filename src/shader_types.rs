@@ -28,18 +28,20 @@ pub mod ops {
     pub const CCX: u32     = 18;
     pub const MZ: u32      = 19;
     pub const MRESETZ: u32 = 20;
+    pub const MEVERYZ: u32 = 21; // Implicit at end of circuit (for now)
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct Op {
+    pub op_idx: u32, // Ordinal number. We use a 'RESET' on the first op to signal the start of a circuit.
     pub op_id: u32,
-    pub target: u32,
-    pub control: u32,
-    pub control2: u32, // For ccx
+    pub qubit: u32,
+    pub ctrl1: u32,
+    pub ctrl2: u32, // For ccx
     pub angle: f32, // For rx, ry, rz, rzz
     // Pad out to 256 butes for WebGPU dynamic buffer alignment
-    pub padding: [u8; 236],
+    pub padding: [u8; 232],
 }
 
 #[repr(C)]

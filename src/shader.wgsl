@@ -1,6 +1,9 @@
 // See https://webgpufundamentals.org/webgpu/lessons/webgpu-wgsl.html for an overview
 // See https://www.w3.org/TR/WGSL/ for the details
 
+// NOTE: WGSL doesn't have the ternary operator, but does have a built-in function `select` that can be used to achieve similar functionality.
+// See https://www.w3.org/TR/WGSL/#select-builtin
+
 // ***** IMPORTANT: Keep this first section in sync with the shader_types module in main.rs *****
 
 const MAX_QUBITS_PER_THREAD: u32 = 10u;
@@ -27,11 +30,14 @@ const RZZ: u32     = 17;
 const CCX: u32     = 18;
 const MZ: u32      = 19;
 const MRESETZ: u32 = 20;
+const MEVERYZ: u32 = 21;
 
 struct Op {
+    op_idx: u32,
     op_id: u32,
     qubit: u32,
-    control: u32,
+    ctrl1: u32,
+    ctrl2: u32,
     angle: f32,
 }
 
@@ -40,18 +46,13 @@ struct Result {
     probability: f32,
 }
 
-struct RunInfo {
-    shot_buffer_entries: u32,
-    qubit_count: u32,
-    shot_count: u32,
-    output_states_per_thread: u32,
-    threads_per_workgroup: u32,
-    workgroups: u32,
-    op_count: u32,
-    op_index: u32,
-}
-
 // ***** END IMPORTANT SECTION *****
+
+const M_PI       = 3.14159265358979323846264338327950288;  /* pi        */
+const M_PI_2     = 1.57079632679489661923132169163975144;  /* pi/2      */
+const M_PI_4     = 0.78539816339744830961566084581987572;  /* pi/4      */
+const M_SQRT2    = 1.41421356237309504880168872420969808;  /* sqrt(2)   */
+const M_SQRT1_2  = 0.70710678118654752440084436210484903;  /* 1/sqrt(2) */
 
 // Input to the shader. The length of the array is determined by what buffer is bound.
 //
@@ -66,22 +67,197 @@ var<storage, read> circuitOps: array<Op>;
 @group(0) @binding(2)
 var<storage, read_write> results: array<Result>;
 
-override ENTRIES_PER_THREAD: u32 = 10;
-override WORKGROUP_SIZE_X: u32 = 32;
+// The below should all be overridden by the Rust code when creating the pipeline based on the circuit
+override WORKGROUP_SIZE_X: u32;
+override QUBIT_COUNT: u32;
+// override ENTRIES_PER_THREAD: u32 = 256;
 
-// Ideal workgroup size depends on the hardware, the workload, and other factors. However, it should
-// _generally_ be a multiple of 64. Common sizes are 64x1x1, 256x1x1; or 8x8x1, 16x16x1 for 2D workloads.
 @compute @workgroup_size(WORKGROUP_SIZE_X)
 fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    // This will end up being a linear index of all the threads run total (including across workgroups).
+    // This will end up being a linear id of all the threads run total (including across workgroups).
     let thread_id = global_id.x + global_id.y * WORKGROUP_SIZE_X;
 
-    let array_length = arrayLength(&results);
-    if (thread_id >= array_length) {
+    let op = circuitOps[0];
+
+    // For the first op, the first thread should set the state vector to the initial state.
+    // The other threads should just exit early.
+    if (op.op_idx == 0) {
+        if (thread_id == 0) {
+            stateVec[0] = vec2f(1.0, 0.0); // Set the initial state to |00..00>
+        }
         return;
     }
 
-    // Results array will basically be an increasing counter.
-    results[thread_id].entry_idx = thread_id;
-    results[thread_id].probability = 1.5 * f32(global_id.x);
+    // For the last op, the first thread should scan the probabilities and write the results.
+    if (op.op_id == MEVERYZ) {
+        if (thread_id == 0) {
+            var curr_idx = 0u;
+            let entry_count = 1u << QUBIT_COUNT;
+            for (var i: u32 = 0; i < entry_count; i++) {
+                // Calculate the probability of this entry
+                let prob = stateVec[i].x * stateVec[i].x + stateVec[i].y * stateVec[i].y;
+                if (prob > 0.01) {
+                    results[curr_idx].entry_idx = i;
+                    results[curr_idx].probability = prob;
+                    curr_idx += 1;
+                }
+            }
+        }
+        return;
+    }
+    // TODO: MZ and MRESETZ (assume base profile with all measurements at the end of the circuit for now)
+
+    switch op.op_id {
+        case ID {
+            // No operation, just return.
+            return;
+        }
+        case X, Y, Z, H, S, S_ADJ, T, T_ADJ, SX, SX_ADJ, RX, RY, RZ {
+            apply_1q_op(op, thread_id);
+            return;
+        }
+        case CX, CZ, RZZ {
+            apply_2q_op(op, thread_id);
+            return;
+        }
+        default {
+            // TODO: Report error for unsupported op
+        }
+    }
+}
+
+fn cplxmul(a: vec2f, b: vec2f) -> vec2f {
+    return vec2f(
+        a.x * b.x - a.y * b.y,
+        a.x * b.y + a.y * b.x
+    );
+}
+
+fn apply_1q_op(op: Op, thread_id: u32) {
+    const ITERATIONS: u32 = 1u << (MAX_QUBITS_PER_THREAD - 1);
+
+    let stride: u32 = 1u << op.qubit;
+    let thread_start_iteration: u32 = thread_id * ITERATIONS;
+
+    // Find the start offset based on the thread and stride
+    var offset: u32 = thread_start_iteration % stride + ((thread_start_iteration / stride) * 2 * stride);
+    let iterations: u32 = select(ITERATIONS, (1u << (QUBIT_COUNT - 1)), QUBIT_COUNT < MAX_QUBITS_PER_THREAD);
+
+    var coeff1: vec2f = vec2f(0.0, 0.0);
+    var coeff2: vec2f = vec2f(0.0, 0.0);
+
+    // TODO: X, Y, Z, S, S_ADJ, T, T_ADJ, SX_ADJ, RY
+    switch op.op_id {
+        case SX {
+            coeff1 = vec2f(0.5, 0.5);
+            coeff2 = vec2f(0.5, -0.5);
+        }
+        case RX {
+            coeff1 = vec2f(cos(op.angle / 2.0), 0.0);
+            coeff2 = vec2f(0, -sin(op.angle / 2));
+        }
+        case RZ {
+            // Coeff1 is just 1, and don't get used for Rz
+            coeff2 = vec2f(cos(op.angle), sin(op.angle));
+        }
+        case H {
+            coeff1 = vec2f(1.0 / M_SQRT2, 0.0);
+            coeff2 = vec2f(-1.0 / M_SQRT2, 0.0);
+        }
+        default {
+            // TODO: Error
+        }
+    }
+
+    for (var i: u32 = 0; i < iterations; i++) {
+        // TODO: Some gates don't touch the first entry, so could avoid reading it.
+        let entry0 = stateVec[offset];
+        let entry1 = stateVec[offset + stride];
+
+        switch op.op_id {
+            case SX {
+                let res0 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff2);
+                let res1 = cplxmul(entry0, coeff2) + cplxmul(entry1, coeff1);
+
+                stateVec[offset] = res0;
+                stateVec[offset + stride] = res1;
+            }
+            case RZ {
+                let res1 = cplxmul(entry1, coeff2);
+                stateVec[offset + stride] = res1;
+            }
+            case RX {
+                let res0 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff2);
+                let res1 = cplxmul(entry0, coeff2) + cplxmul(entry1, coeff1);
+
+                stateVec[offset] = res0;
+                stateVec[offset + stride] = res1;
+            }
+            case H {
+                let res0 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff1);
+                let res1 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff2);
+
+                stateVec[offset] = res0;
+                stateVec[offset + stride] = res1;
+            }
+            default {
+                // Should never happen, as should have errored in prior switch.
+            }
+        }
+
+        offset += 1;
+        // If we walked past the end of the block, jump to the next stride
+        // The target qubit flips to 1 when we walk past the 0 entries, and
+        // a target qubit value is also the stride size
+        offset += (offset & stride);
+    }
+}
+
+fn apply_2q_op(op: Op, thread_id: u32) {
+    const ITERATIONS: u32 = 1u << (MAX_QUBITS_PER_THREAD - 2); 
+
+    let iterations: u32 = select(1u << (QUBIT_COUNT - 2), ITERATIONS, QUBIT_COUNT >= MAX_QUBITS_PER_THREAD);
+    let start_count: u32 = thread_id * ITERATIONS;
+    let end_count: u32 = start_count + iterations;
+
+    // Coefficient only needed for RZZ
+    let coeff: vec2f = select(vec2f(0.0), vec2f(cos(op.angle), -sin(op.angle)), op.op_id == RZZ);
+
+    let lowQubit = select(op.qubit, op.ctrl1, op.qubit > op.ctrl1);
+    let hiQubit = select(op.qubit, op.ctrl1, op.qubit < op.ctrl1);
+
+    let lowBitCount = lowQubit;
+    let midBitCount = hiQubit - lowQubit - 1;
+    let hiBitCount = QUBIT_COUNT - hiQubit - 1;
+
+    let lowMask = (1u << lowBitCount) - 1;
+    let midMask = (1u << (lowBitCount + midBitCount)) - 1 - lowMask;
+    let hiMask = (1u << (lowBitCount + midBitCount + hiBitCount)) - 1 - midMask - lowMask;
+
+    for (var i: u32 = start_count; i < end_count; i++) {
+        switch op.op_id {
+            case CX {
+                let offset10: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.ctrl1);
+                let offset11: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.ctrl1) | (1u << op.qubit);
+
+                let old10 = stateVec[offset10];
+                stateVec[offset10] = stateVec[offset11];
+                stateVec[offset11] = old10;
+            }
+            case CZ {
+                let offset: u32 = (i & lowMask) | (1u << lowQubit) | ((i & midMask) << 1) | (1u << hiQubit) | ((i & hiMask) << 2);
+                stateVec[offset] *= -1;
+            }
+            case RZZ {
+                let offset01: u32 = (i & lowMask) | ((i & midMask) << 1) | (1u << hiQubit) | ((i & hiMask) << 2);
+                let offset10: u32 = (i & lowMask) | (1u << lowQubit) | ((i & midMask) << 1) | ((i & hiMask) << 2);
+
+                stateVec[offset01] = cplxmul(stateVec[offset01], coeff);
+                stateVec[offset10] = cplxmul(stateVec[offset10], coeff);
+            }
+            default {
+
+            }
+        }
+    }
 }

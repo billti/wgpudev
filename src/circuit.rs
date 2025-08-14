@@ -1,20 +1,10 @@
 #![allow(unused)]
 
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Zeroable, bytemuck::Pod)]
-pub struct CircuitOp {
-    pub op_id: u32, // op type
-    pub q1: u32, // target qubit
-    pub q2: u32, // control qubit for cx, cz, etc., or second qubit for rzz
-    pub q3: u32, // additional control for ccx
-    pub arg: f32, // rx, ry, rz, rzz
-    // Pad out to 256 bytes for buffer alignment (WebGPU requirement for dynamic offset buffers)
-    pub padding: [u8; 236],
-}
+use crate::shader_types::{Op};
 
 pub struct Circuit {
     pub qubit_count: u32,
-    pub ops: Vec<CircuitOp>,
+    pub ops: Vec<Op>,
 }
 
 // Add a helper to create the ops buffer using bytemuck to cast the slice.
@@ -31,8 +21,21 @@ impl Circuit {
     pub fn from_str(src: &str) -> Result<Self, String> {
         use crate::shader_types::ops;
 
-        let mut ops_vec: Vec<CircuitOp> = Vec::new();
+        let mut ops_vec: Vec<Op> = Vec::new();
         let mut max_qubit: i64 = -1;
+
+        // Add a reset op at the start to signal the start of a circuit.
+        ops_vec.push(Op {
+            op_idx: 0, // This is the first op, so index is 0
+            op_id: ops::RESET,
+            qubit: 0,
+            ctrl1: 0,
+            ctrl2: 0,
+            angle: 0.0,
+            padding: [0; 232],
+        });
+
+        let mut op_idx = 1;
 
         for (lineno, raw_line) in src.lines().enumerate() {
             let line = raw_line.trim();
@@ -155,16 +158,27 @@ impl Circuit {
                 max_qubit = max_qubit.max(q3 as i64);
             }
 
-            let op = CircuitOp {
+            let op = Op {
+                op_idx,
                 op_id,
-                q1,
-                q2,
-                q3,
-                arg: angle.unwrap_or(0.0),
-                padding: [0; 236],
+                qubit: q1,
+                ctrl1: q2,
+                ctrl2: q3,
+                angle: angle.unwrap_or(0.0),
+                padding: [0; 232],
             };
             ops_vec.push(op);
+            op_idx += 1;
         }
+        ops_vec.push(Op {
+            op_idx: op_idx as u32,
+            op_id: ops::MEVERYZ, // Implicit measurement at the end of the circuit
+            qubit: 0,
+            ctrl1: 0,
+            ctrl2: 0,
+            angle: 0.0,
+            padding: [0; 232],
+        });
 
         let qubit_count = if max_qubit >= 0 { (max_qubit as u32) + 1 } else { 0 };
         Ok(Circuit { qubit_count, ops: ops_vec })
