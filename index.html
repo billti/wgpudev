@@ -3,11 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>WebGPU quantum simulator</title>
+    <style>
+        body {
+            font-family: system-ui, Arial, sans-serif;
+            margin: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        textarea {
+            font-family: monospace;
+            font-size: 14px;
+        }
+        button {
+            margin-top: 4px;
+            padding: 4px 8px;
+            font-size: 14px;
+        }
+        pre {
+            background-color: #f4f4f4;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
 </head>
 <body>
     <h1>WebGPU Quantum State Vector Simulation</h1>
-    <textarea id="circuit" rows="20" cols="40">
+    <p>Current gates supported: <i>X, H, SX, RX, RZ, CX, CZ, RZZ</i>. All qubits are measured at the end.</p>
+    <textarea id="circuit" rows="20" cols="80">
 h 0
 cx 0 1
 </textarea>

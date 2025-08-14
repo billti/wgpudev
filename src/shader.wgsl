@@ -164,6 +164,10 @@ fn apply_1q_op(op: Op, thread_id: u32) {
         let entry1 = stateVec[offset + stride];
 
         switch op.op_id {
+            case X {
+                stateVec[offset + stride] = stateVec[offset];
+                stateVec[offset] = entry1;
+            }
             case SX {
                 let entry0 = stateVec[offset];
                 let res0 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff2);
