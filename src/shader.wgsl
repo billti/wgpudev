@@ -70,7 +70,6 @@ var<storage, read_write> results: array<Result>;
 // The below should all be overridden by the Rust code when creating the pipeline based on the circuit
 override WORKGROUP_SIZE_X: u32;
 override QUBIT_COUNT: u32;
-// override ENTRIES_PER_THREAD: u32 = 256;
 
 @compute @workgroup_size(WORKGROUP_SIZE_X)
 fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
@@ -89,22 +88,23 @@ fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     // For the last op, the first thread should scan the probabilities and write the results.
-    if (op.op_id == MEVERYZ) {
-        if (thread_id == 0) {
-            var curr_idx = 0u;
-            let entry_count = 1u << QUBIT_COUNT;
-            for (var i: u32 = 0; i < entry_count; i++) {
-                // Calculate the probability of this entry
-                let prob = stateVec[i].x * stateVec[i].x + stateVec[i].y * stateVec[i].y;
-                if (prob > 0.01) {
-                    results[curr_idx].entry_idx = i;
-                    results[curr_idx].probability = prob;
-                    curr_idx += 1;
-                }
-            }
-        }
-        return;
-    }
+    // TODO: This hits perf running on a single thread. Look to fan it out.
+    // if (op.op_id == MEVERYZ) {
+    //     if (thread_id == 0) {
+    //         var curr_idx = 0u;
+    //         let entry_count = 1u << QUBIT_COUNT;
+    //         for (var i: u32 = 0; i < entry_count; i++) {
+    //             // Calculate the probability of this entry
+    //             let prob = stateVec[i].x * stateVec[i].x + stateVec[i].y * stateVec[i].y;
+    //             if (prob > 0.01) {
+    //                 results[curr_idx].entry_idx = i;
+    //                 results[curr_idx].probability = prob;
+    //                 curr_idx += 1;
+    //             }
+    //         }
+    //     }
+    //     return;
+    // }
     // TODO: MZ and MRESETZ (assume base profile with all measurements at the end of the circuit for now)
 
     switch op.op_id {
@@ -170,12 +170,11 @@ fn apply_1q_op(op: Op, thread_id: u32) {
     }
 
     for (var i: u32 = 0; i < iterations; i++) {
-        // TODO: Some gates don't touch the first entry, so could avoid reading it.
-        let entry0 = stateVec[offset];
         let entry1 = stateVec[offset + stride];
 
         switch op.op_id {
             case SX {
+                let entry0 = stateVec[offset];
                 let res0 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff2);
                 let res1 = cplxmul(entry0, coeff2) + cplxmul(entry1, coeff1);
 
@@ -187,6 +186,7 @@ fn apply_1q_op(op: Op, thread_id: u32) {
                 stateVec[offset + stride] = res1;
             }
             case RX {
+                let entry0 = stateVec[offset];
                 let res0 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff2);
                 let res1 = cplxmul(entry0, coeff2) + cplxmul(entry1, coeff1);
 
@@ -194,6 +194,7 @@ fn apply_1q_op(op: Op, thread_id: u32) {
                 stateVec[offset + stride] = res1;
             }
             case H {
+                let entry0 = stateVec[offset];
                 let res0 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff1);
                 let res1 = cplxmul(entry0, coeff1) + cplxmul(entry1, coeff2);
 

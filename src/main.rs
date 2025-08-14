@@ -12,14 +12,17 @@ use shader_types::{ops, Op};
 mod tests;
 
 fn main() {
+    // let ising_str = include_str!("ising5x5.crc");
+    // let circ = Circuit::from_str(ising_str).unwrap();
+
     let circ = Circuit::from_str("
-sx 0
-rz(0.5) 1
+h 0
+cx 1 0
 ").expect("Failed to parse circuit");
 
     let result = futures::executor::block_on(async {
-        let mut gpu_context = gpu_context::GpuContext::new().await;
-        gpu_context.create_resources(circ);
+        let mut gpu_context = gpu_context::GpuContext::new(circ).await;
+        gpu_context.create_resources();
         gpu_context.run().await
     });
     println!("Result length: {}", result.len());

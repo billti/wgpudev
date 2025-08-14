@@ -6,7 +6,7 @@ use crate::shader_types::{Result, Op};
 use futures::FutureExt;
 use std::num::NonZeroU64;
 use wgpu::{
-    Adapter, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Device, Queue, ShaderModule,
+    Adapter, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Device, Limits, Queue, ShaderModule
 };
 
 const DO_CAPTURE: bool = true;
@@ -16,7 +16,11 @@ pub struct GpuContext {
     queue: Queue,
     shader_module: ShaderModule,
     bind_group_layout: BindGroupLayout,
+    circuit: Circuit,
     resources: Option<GpuResources>,
+    entries_per_thread: u32,
+    threads_per_workgroup: u32,
+    workgroup_count: u32,
 }
 
 struct GpuResources {
@@ -26,11 +30,19 @@ struct GpuResources {
     results_buffer: Buffer,
     download_buffer: Buffer,
     bind_group: BindGroup,
-    circuit: Circuit,
 }
 
 impl GpuContext {
-    pub async fn new() -> Self {
+    pub async fn new(circuit: Circuit) -> Self {
+        if circuit.qubit_count > 28 {
+            // The maximum buffer size you can request needs to fit in a u32, so we limit the qubit count to 28.
+            // 29 would be 4GB, which is 1 to high :(
+            panic!("Qubit count too high: {}", circuit.qubit_count);
+        }
+
+        let (entries_per_thread, threads_per_workgroup, workgroup_count) =
+            Self::get_params(circuit.qubit_count);
+
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
         let adapter: Adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
@@ -45,12 +57,24 @@ impl GpuContext {
             panic!("Adapter does not support compute shaders");
         }
 
+        let buffer_needed: u32 = if circuit.qubit_count < 17 {
+            1024 * 1024 // Min 1MB for small circuits
+        } else {
+            (1u32 << circuit.qubit_count) * 8 // 8 bytes per complex number for larger circuits
+        };
+
         let (device, queue): (Device, Queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
+                // required_limits: Limits {
+                //     max_compute_workgroup_size_x: 32,
+                //     max_compute_workgroups_per_dimension: 65535,
+                //     max_storage_buffer_binding_size: buffer_needed,
+                //     ..Default::default()
+                // },
                 required_limits: wgpu::Limits::downlevel_defaults(),
-                memory_hints: wgpu::MemoryHints::MemoryUsage,
+                memory_hints: wgpu::MemoryHints::Performance,
                 trace: wgpu::Trace::Off,
             })
             .await
@@ -111,17 +135,52 @@ impl GpuContext {
             shader_module,
             bind_group_layout,
             resources: None,
+            circuit,
+            entries_per_thread,
+            threads_per_workgroup,
+            workgroup_count,
         }
     }
 
-    pub fn create_resources(&mut self, circuit: Circuit) {
+    pub fn get_params(qubit_count: u32) -> (u32, u32, u32) {
+        // Figure out how many threads and threadgroups to use based on the qubit count.
+        const MAX_QUBITS_PER_THREAD: u32 = 10;
+        const MAX_QUBITS_PER_THREADGROUP: u32 = 12;
+        
+        if qubit_count < MAX_QUBITS_PER_THREAD {
+            // All qubits fit in one thread
+            return (
+                1 << qubit_count,    // Output states to process per thread
+                1,                   // Threads per workgroup
+                1                    // Workgroup count
+            );
+        } else if qubit_count <= MAX_QUBITS_PER_THREADGROUP {
+            // All qubits fit in one threadgroup
+            return (
+                1 << MAX_QUBITS_PER_THREAD,
+                1 << (qubit_count - MAX_QUBITS_PER_THREAD),
+                1
+            );
+        } else if qubit_count <= 30 {
+            // Then add more threadgroups
+            return (
+                1 << MAX_QUBITS_PER_THREAD,
+                1 << (MAX_QUBITS_PER_THREADGROUP - MAX_QUBITS_PER_THREAD),
+                1 << (qubit_count - MAX_QUBITS_PER_THREADGROUP)
+            );
+        } else {
+            panic!("Qubit count too high: {}", qubit_count);
+        }
+    }
+
+    pub fn create_resources(&mut self) {
         // Assert the the Op size is 256 bytes
         assert_eq!(
             std::mem::size_of::<Op>(),
             256,
             "Op struct must be 256 bytes for WebGPU dynamic buffer alignment"
         );
-        let state_vector_entries: u64 = 2u64.pow(circuit.qubit_count);
+        let state_vector_entries: u64 = 2u64.pow(self.circuit.qubit_count);
         let result_buffer_size_bytes: u64 = std::mem::size_of::<Result>() as u64 * 100;
 
         let state_vector_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -132,7 +191,7 @@ impl GpuContext {
         });
 
         // Initialize ops buffer from the circuit using bytemuck
-        let ops_buffer = circuit.create_ops_buffer(&self.device);
+        let ops_buffer = self.circuit.create_ops_buffer(&self.device);
 
         let results_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Results Buffer"),
@@ -187,7 +246,10 @@ impl GpuContext {
                 entry_point: Some("run_statevector_ops"),
                 // When creating the pipeline, override the workgroup size based on the qubit count.
                 compilation_options: wgpu::PipelineCompilationOptions {
-                    constants: &[("WORKGROUP_SIZE_X", 64.0), ("QUBIT_COUNT", circuit.qubit_count as f64)], // TODO: Set this based on params
+                    constants: &[
+                        ("WORKGROUP_SIZE_X", self.threads_per_workgroup as f64),
+                        ("QUBIT_COUNT", self.circuit.qubit_count as f64),
+                    ],
                     ..Default::default()
                 },
                 cache: None,
@@ -200,7 +262,6 @@ impl GpuContext {
             results_buffer,
             download_buffer,
             bind_group,
-            circuit,
         });
     }
 
@@ -220,8 +281,8 @@ impl GpuContext {
 
         compute_pass.set_pipeline(&resources.pipeline);
 
-        let op_count = resources.circuit.ops.len() as u32;
-        let workgroup_count: u32 = 10; // TODO: How many workgroups to dispatch based on the qubit count
+        let op_count = self.circuit.ops.len() as u32;
+        let workgroup_count: u32 = self.workgroup_count;
         for i in 0..op_count {
             let op_offset: u32 = i * 256; // Each op is 256 bytes (aligned)
             compute_pass.set_bind_group(0, &resources.bind_group, &[op_offset]);

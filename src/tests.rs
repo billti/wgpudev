@@ -24,8 +24,8 @@ fn run_bell() {
     let circ = Circuit::from_str("h 0\ncx 0 1\n").expect("Failed to parse circuit");
 
     let results = futures::executor::block_on(async {
-        let mut gpu_context = GpuContext::new().await;
-        gpu_context.create_resources(circ);
+        let mut gpu_context = GpuContext::new(circ).await;
+        gpu_context.create_resources();
         gpu_context.run().await
     });
 

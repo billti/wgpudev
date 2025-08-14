@@ -7,19 +7,16 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys;
 
 #[wasm_bindgen]
-pub fn add(a: i32, b: i32) -> i32 {
-    a + b
+pub fn add(a: i32, c: i32) -> i32 {
+    a + c
 }
 
 #[wasm_bindgen]
-pub async fn run() -> Vec<JsValue> {
-    let circ = Circuit::from_str("
-h 0
-cx 0 1
-").expect("Failed to parse circuit");
+pub async fn run(code: &str) -> Vec<JsValue> {
+    let circ = Circuit::from_str(&code).expect("Failed to parse circuit");
 
-    let mut gpu_context = GpuContext::new().await;
-    gpu_context.create_resources(circ);
+    let mut gpu_context = GpuContext::new(circ).await;
+    gpu_context.create_resources();
     let results = gpu_context.run().await;
 
     // Convert results to a JS value of an array, with elements being an array (tuple) of entry_idx and probability.
