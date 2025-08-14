@@ -1,13 +1,13 @@
 #![allow(unused)]
 
-use circuit::Circuit;
+use crate::circuit::Circuit;
+use crate::shader_types::Result;
+
 use futures::FutureExt;
 use std::num::NonZeroU64;
 use wgpu::{
     Adapter, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Device, Queue, ShaderModule,
 };
-
-use crate::circuit;
 
 const DO_CAPTURE: bool = true;
 
@@ -115,11 +115,12 @@ impl GpuContext {
     }
 
     pub fn create_resources(&mut self, circuit: Circuit) {
-        let state_vector_size: u64 = 2u64.pow(circuit.qubit_count);
+        let state_vector_entries: u64 = 2u64.pow(circuit.qubit_count);
+        let result_buffer_size_bytes: u64 = std::mem::size_of::<Result>() as u64 * 100;
 
         let state_vector_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("StateVector Buffer"),
-            size: state_vector_size,
+            size: state_vector_entries * 2 * std::mem::size_of::<f32>() as u64, // 2 floats per complex entry
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
@@ -129,14 +130,14 @@ impl GpuContext {
 
         let results_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Results Buffer"),
-            size: 8u64 * 1024, // Top 1024 results of u32 vector entry and f32 for probability
+            size: result_buffer_size_bytes,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
         let download_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Download buffer"),
-            size: 8u64 * 1024,
+            size: result_buffer_size_bytes,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
@@ -197,7 +198,7 @@ impl GpuContext {
         });
     }
 
-    pub async fn run(&self) -> Vec<u32> {
+    pub async fn run(&self) -> Vec<Result> {
         let resources: &GpuResources = self.resources.as_ref().expect("Resources not initialized");
 
         let mut encoder = self
@@ -213,7 +214,6 @@ impl GpuContext {
 
         compute_pass.set_pipeline(&resources.pipeline);
 
-        // TODO: Use the real op count
         let op_count = resources.circuit.ops.len() as u32;
         let workgroup_count: u32 = 10; // TODO: How many workgroups to dispatch based on the qubit count
         for i in 0..op_count {
@@ -255,7 +255,7 @@ impl GpuContext {
 
         // Read, copy out, and unmap.
         let data = buffer_slice.get_mapped_range();
-        let results: Vec<u32> = bytemuck::cast_slice(&data).to_vec();
+        let results: Vec<Result> = bytemuck::cast_slice(&data).to_vec();
         drop(data);
         resources.download_buffer.unmap();
 

@@ -1,3 +1,6 @@
+// See https://webgpufundamentals.org/webgpu/lessons/webgpu-wgsl.html for an overview
+// See https://www.w3.org/TR/WGSL/ for the details
+
 // ***** IMPORTANT: Keep this first section in sync with the shader_types module in main.rs *****
 
 const MAX_QUBITS_PER_THREAD: u32 = 10u;
@@ -32,6 +35,11 @@ struct Op {
     angle: f32,
 }
 
+struct Result {
+    entry_idx: u32,
+    probability: f32,
+}
+
 struct RunInfo {
     shot_buffer_entries: u32,
     qubit_count: u32,
@@ -49,32 +57,31 @@ struct RunInfo {
 //
 // StateVector entries 
 @group(0) @binding(0)
-var<storage, read_write> stateVec: array<f32>;
+var<storage, read_write> stateVec: array<vec2f>;
 // Circuit ops.  
 @group(0) @binding(1)
-var<storage, read> circuitOps: array<f32>;
+var<storage, read> circuitOps: array<Op>;
 
 // Results
 @group(0) @binding(2)
-var<storage, read_write> results: array<f32>;
+var<storage, read_write> results: array<Result>;
 
-override WORKGROUP_SIZE_X: u32 = 64;
+override ENTRIES_PER_THREAD: u32 = 10;
+override WORKGROUP_SIZE_X: u32 = 32;
 
 // Ideal workgroup size depends on the hardware, the workload, and other factors. However, it should
 // _generally_ be a multiple of 64. Common sizes are 64x1x1, 256x1x1; or 8x8x1, 16x16x1 for 2D workloads.
 @compute @workgroup_size(WORKGROUP_SIZE_X)
 fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    // While compute invocations are 3d, we're only using one dimension.
-    let index = global_id.x;
+    // This will end up being a linear index of all the threads run total (including across workgroups).
+    let thread_id = global_id.x + global_id.y * WORKGROUP_SIZE_X;
 
-    // Because we're using a workgroup size of 64, if the input size isn't a multiple of 64,
-    // we will have some "extra" invocations. This is fine, but we should tell them to stop
-    // to avoid out-of-bounds accesses.
-    let array_length = arrayLength(&stateVec);
-    if (global_id.x >= array_length) {
+    let array_length = arrayLength(&results);
+    if (thread_id >= array_length) {
         return;
     }
 
-    // Do the multiply by two and write to the output.
-    results[global_id.x] = stateVec[global_id.x] * 2.0;
+    // Results array will basically be an increasing counter.
+    results[thread_id].entry_idx = thread_id;
+    results[thread_id].probability = 1.5 * f32(global_id.x);
 }

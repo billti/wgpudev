@@ -1,8 +1,10 @@
 use crate::circuit::{Circuit, CircuitOp};
 use crate::shader_types::ops;
 use crate::gpu_context::GpuContext;
+use crate::shader_types::Result;
 
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::js_sys;
 
 #[wasm_bindgen]
 pub fn add(a: i32, b: i32) -> i32 {
@@ -10,7 +12,7 @@ pub fn add(a: i32, b: i32) -> i32 {
 }
 
 #[wasm_bindgen]
-pub async fn run() -> u32 {
+pub async fn run() -> Vec<JsValue> {
     let circ = Circuit {
         qubit_count: 4,
         ops: vec![
@@ -37,5 +39,14 @@ pub async fn run() -> u32 {
     gpu_context.create_resources(circ);
     let results = gpu_context.run().await;
 
-    results.len() as u32
+    // Convert results to a JS value of an array, with elements being an array (tuple) of entry_idx and probability.
+    // We don't have serde, so convert manually.
+    let return_val = js_sys::Array::new();
+    for result in results {
+        let js_tuple = js_sys::Array::new();
+        js_tuple.push(&JsValue::from(result.entry_idx));
+        js_tuple.push(&JsValue::from(result.probability));
+        return_val.push(&js_tuple);
+    }
+    return_val.to_vec()
 }

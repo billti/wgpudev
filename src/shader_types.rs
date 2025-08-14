@@ -44,6 +44,13 @@ pub struct Op {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
+pub struct Result {
+    pub entry_idx: u32,
+    pub probability: f32,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct RunInfo {
     pub shot_buffer_entries: u32,
     pub qubit_count: u32,
