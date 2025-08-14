@@ -67,6 +67,9 @@ var<storage, read> circuitOps: array<Op>;
 @group(0) @binding(2)
 var<storage, read_write> results: array<Result>;
 
+@group(0) @binding(3)
+var<storage, read_write> result_idx: atomic<u32>;
+
 // The below should all be overridden by the Rust code when creating the pipeline based on the circuit
 override WORKGROUP_SIZE_X: u32;
 override QUBIT_COUNT: u32;
@@ -90,19 +93,7 @@ fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // For the last op, the first thread should scan the probabilities and write the results.
     // TODO: This hits perf running on a single thread. Look to fan it out.
     if (op.op_id == MEVERYZ) {
-        if (thread_id == 0) {
-            var curr_idx = 0u;
-            let entry_count = 1u << QUBIT_COUNT;
-            for (var i: u32 = 0; i < entry_count; i++) {
-                // Calculate the probability of this entry
-                let prob = stateVec[i].x * stateVec[i].x + stateVec[i].y * stateVec[i].y;
-                if (prob > 0.01) {
-                    results[curr_idx].entry_idx = i;
-                    results[curr_idx].probability = prob;
-                    curr_idx += 1;
-                }
-            }
-        }
+        scan_probabilities(thread_id);
         return;
     }
     // TODO: MZ and MRESETZ (assume base profile with all measurements at the end of the circuit for now)
@@ -260,6 +251,32 @@ fn apply_2q_op(op: Op, thread_id: u32) {
             default {
 
             }
+        }
+    }
+}
+
+fn scan_probabilities(thread_id: u32) {
+    // Scan the chunk of the state vector assigned to this thread and for any probabilities above 1%,
+    // write the result to the results buffer and update the atomic index.
+    const ITERATIONS: u32 = 1u << (MAX_QUBITS_PER_THREAD); 
+
+    let iterations: u32 = select(1u << (QUBIT_COUNT), ITERATIONS, QUBIT_COUNT >= MAX_QUBITS_PER_THREAD);
+    let start_idx: u32 = thread_id * ITERATIONS;
+    let end_idx: u32 = start_idx + iterations;
+
+    for (var i: u32 = start_idx; i < end_idx; i++) {
+        // Calculate the probability of this entry
+        let entry = stateVec[i];
+        let prob = entry.x * entry.x + entry.y * entry.y;
+        if prob > 0.01 {
+            // Use atomic operations to safely write to the results buffer
+            let curr_idx = atomicAdd(&result_idx, 1);
+            if curr_idx >= arrayLength(&results) {
+                // Shouldn't happen, but just for safety
+                continue;
+            }
+            results[curr_idx].entry_idx = i;
+            results[curr_idx].probability = prob;
         }
     }
 }

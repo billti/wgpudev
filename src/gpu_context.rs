@@ -126,6 +126,17 @@ impl GpuContext {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    // Result index buffer
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -207,6 +218,13 @@ impl GpuContext {
             mapped_at_creation: false,
         });
 
+        let result_idx_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Result Index Buffer"),
+            size: std::mem::size_of::<u32>() as u64,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
         let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("StateVector Bind Group"),
             layout: &self.bind_group_layout,
@@ -227,6 +245,10 @@ impl GpuContext {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: results_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: result_idx_buffer.as_entire_binding(),
                 },
             ],
         });
