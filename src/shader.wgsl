@@ -35,9 +35,9 @@ const MEVERYZ: u32 = 21;
 struct Op {
     op_idx: u32,
     op_id: u32,
-    qubit: u32,
-    ctrl1: u32,
-    ctrl2: u32,
+    q1: u32,
+    q2: u32,
+    q3: u32,
     angle: f32,
 }
 
@@ -136,7 +136,7 @@ fn cplxmul(a: vec2f, b: vec2f) -> vec2f {
 fn apply_1q_op(op: Op, thread_id: u32) {
     const ITERATIONS: u32 = 1u << (MAX_QUBITS_PER_THREAD - 1);
 
-    let stride: u32 = 1u << op.qubit;
+    let stride: u32 = 1u << op.q1;
     let thread_start_iteration: u32 = thread_id * ITERATIONS;
 
     // Find the start offset based on the thread and stride
@@ -223,8 +223,8 @@ fn apply_2q_op(op: Op, thread_id: u32) {
     // Coefficient only needed for RZZ
     let coeff: vec2f = select(vec2f(0.0), vec2f(cos(op.angle), -sin(op.angle)), op.op_id == RZZ);
 
-    let lowQubit = select(op.qubit, op.ctrl1, op.qubit > op.ctrl1);
-    let hiQubit = select(op.qubit, op.ctrl1, op.qubit < op.ctrl1);
+    let lowQubit = select(op.q1, op.q2, op.q1 > op.q2);
+    let hiQubit = select(op.q1, op.q2, op.q1 < op.q2);
 
     let lowBitCount = lowQubit;
     let midBitCount = hiQubit - lowQubit - 1;
@@ -237,8 +237,9 @@ fn apply_2q_op(op: Op, thread_id: u32) {
     for (var i: u32 = start_count; i < end_count; i++) {
         switch op.op_id {
             case CX {
-                let offset10: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.ctrl1);
-                let offset11: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.ctrl1) | (1u << op.qubit);
+                // q1 is the control, q2 is the target
+                let offset10: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.q1);
+                let offset11: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.q1) | (1u << op.q2);
 
                 let old10 = stateVec[offset10];
                 stateVec[offset10] = stateVec[offset11];

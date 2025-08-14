@@ -28,9 +28,9 @@ impl Circuit {
         ops_vec.push(Op {
             op_idx: 0, // This is the first op, so index is 0
             op_id: ops::RESET,
-            qubit: 0,
-            ctrl1: 0,
-            ctrl2: 0,
+            q1: 0,
+            q2: 0,
+            q3: 0,
             angle: 0.0,
             padding: [0; 232],
         });
@@ -161,9 +161,9 @@ impl Circuit {
             let op = Op {
                 op_idx,
                 op_id,
-                qubit: q1,
-                ctrl1: q2,
-                ctrl2: q3,
+                q1,
+                q2,
+                q3,
                 angle: angle.unwrap_or(0.0),
                 padding: [0; 232],
             };
@@ -173,9 +173,9 @@ impl Circuit {
         ops_vec.push(Op {
             op_idx: op_idx as u32,
             op_id: ops::MEVERYZ, // Implicit measurement at the end of the circuit
-            qubit: 0,
-            ctrl1: 0,
-            ctrl2: 0,
+            q1: 0,
+            q2: 0,
+            q3: 0,
             angle: 0.0,
             padding: [0; 232],
         });

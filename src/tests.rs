@@ -21,7 +21,7 @@ fn load_ising() {
 
 #[test]
 fn run_bell() {
-    let circ = Circuit::from_str("h 0\ncx 1 0\n").expect("Failed to parse circuit");
+    let circ = Circuit::from_str("h 0\ncx 0 1\n").expect("Failed to parse circuit");
 
     let results = futures::executor::block_on(async {
         let mut gpu_context = GpuContext::new().await;
