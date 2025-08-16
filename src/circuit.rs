@@ -418,13 +418,32 @@ impl Circuit {
         Ok(Circuit { qubit_count, ops: ops_vec })
     }
 
-    pub fn create_ops_buffer(&self, device: &wgpu::Device) -> wgpu::Buffer {
+    pub fn create_ops_buffer(&self, device: &wgpu::Device, xcode_traceable: bool) -> wgpu::Buffer {
         // This safely treats &[CircuitOp] as &[u8] due to Pod + repr(C)
         use wgpu::util::DeviceExt;
-        device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Ops Buffer"),
-            contents: bytemuck::cast_slice(&self.ops),
-            usage: wgpu::BufferUsages::STORAGE,
-        })
+        if xcode_traceable {
+            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Ops Buffer"),
+                size: (self.ops.len() * std::mem::size_of::<Op>()) as u64,
+                usage: wgpu::BufferUsages::STORAGE
+                    | wgpu::BufferUsages::MAP_WRITE
+                    | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: true,
+            });
+
+            buffer
+                .slice(..)
+                .get_mapped_range_mut()
+                .copy_from_slice(bytemuck::cast_slice(&self.ops));
+
+            buffer.unmap();
+            buffer
+        } else {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Ops Buffer"),
+                contents: bytemuck::cast_slice(&self.ops),
+                usage: wgpu::BufferUsages::STORAGE,
+            })
+        }
     }
 }

@@ -10,6 +10,12 @@ use wgpu::{
 };
 
 const DO_CAPTURE: bool = true;
+// Make XCODE_TRACABLE true only for macOS builds, else false.
+// This is a workaround for Xcode GPU capture not working with how wgpu handles mappable buffers.
+#[cfg(target_os = "macos")]
+const XCODE_TRACABLE: bool = true;
+#[cfg(not(target_os = "macos"))]
+const XCODE_TRACABLE: bool = false;
 
 pub struct GpuContext {
     device: Device,
@@ -66,7 +72,11 @@ impl GpuContext {
         let (device, queue): (Device, Queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
-                required_features: wgpu::Features::empty(),
+                required_features: if XCODE_TRACABLE {
+                    wgpu::Features::MAPPABLE_PRIMARY_BUFFERS
+                } else {
+                    wgpu::Features::empty()
+                },
                 required_limits: Limits {
                     max_compute_workgroup_size_x: 32,
                     max_compute_workgroups_per_dimension: 65535,
@@ -202,7 +212,7 @@ impl GpuContext {
         });
 
         // Initialize ops buffer from the circuit using bytemuck
-        let ops_buffer = self.circuit.create_ops_buffer(&self.device);
+        let ops_buffer = self.circuit.create_ops_buffer(&self.device, XCODE_TRACABLE);
 
         let results_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Results Buffer"),
@@ -348,16 +358,12 @@ impl GpuContext {
         drop(data);
         resources.download_buffer.unmap();
 
-        results
-    }
-}
-
-impl Drop for GpuContext {
-    fn drop(&mut self) {
         if DO_CAPTURE {
             unsafe {
                 self.device.stop_graphics_debugger_capture();
             }
         }
+
+        results
     }
 }
