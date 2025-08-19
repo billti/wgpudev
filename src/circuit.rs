@@ -7,7 +7,7 @@ use crate::shader_types::{Op};
 enum ParsedArg { U32(u32), F32(f32) }
 
 pub struct Circuit {
-    pub qubit_count: u32,
+    pub qubit_count: i32,
     pub ops: Vec<Op>,
 }
 
@@ -37,18 +37,7 @@ impl Circuit {
         let mut ops_vec: Vec<Op> = Vec::new();
         let mut max_qubit: i64 = -1;
 
-        // Add a reset op at the start to signal the start of a circuit.
-        ops_vec.push(Op {
-            op_idx: 0, // This is the first op, so index is 0
-            op_id: ops::RESET,
-            q1: 0,
-            q2: 0,
-            q3: 0,
-            angle: 0.0,
-            padding: [0; 232],
-        });
-
-        let mut op_idx = 1;
+        let mut op_idx = 0;
 
         for (lineno, raw_line) in src.lines().enumerate() {
             let line = raw_line.trim();
@@ -193,7 +182,7 @@ impl Circuit {
             padding: [0; 232],
         });
 
-        let qubit_count = if max_qubit >= 0 { (max_qubit as u32) + 1 } else { 0 };
+        let qubit_count = if max_qubit >= 0 { (max_qubit as i32) + 1 } else { 0 };
         Ok(Circuit { qubit_count, ops: ops_vec })
     }
 
@@ -234,11 +223,11 @@ impl Circuit {
             .ok_or_else(|| "QIR missing required_num_qubits in attributes #0".to_string())?;
         let results_str = find_attr_value(attr_block, "required_num_results")
             .ok_or_else(|| "QIR missing required_num_results in attributes #0".to_string())?;
-        let declared_qubits: u32 = qubits_str
-            .parse::<u32>()
+        let declared_qubits: i32 = qubits_str
+            .parse::<i32>()
             .map_err(|_| format!("Invalid required_num_qubits: {}", qubits_str))?;
-        let declared_results: u32 = results_str
-            .parse::<u32>()
+        let declared_results: i32 = results_str
+            .parse::<i32>()
             .map_err(|_| format!("Invalid required_num_results: {}", results_str))?;
 
         // Find the entry point function body: a line with "define void @...() #0" followed by '{'
@@ -249,8 +238,6 @@ impl Circuit {
         let mut saw_measure = false;
 
         // Always start with a RESET sentinel op
-        ops_vec.push(Op { op_idx, op_id: ops::RESET, q1: 0, q2: 0, q3: 0, angle: 0.0, padding: [0; 232] });
-        op_idx += 1;
 
         for raw in qir.lines() {
             let line = raw.trim();
@@ -411,7 +398,7 @@ impl Circuit {
         ops_vec.push(Op { op_idx, op_id: ops::MEVERYZ, q1: 0, q2: 0, q3: 0, angle: 0.0, padding: [0; 232] });
 
         // Determine qubit count from declared and observed
-        let inferred_qubits = if max_qubit >= 0 { (max_qubit as u32) + 1 } else { 0 };
+        let inferred_qubits = if max_qubit >= 0 { (max_qubit as i32) + 1 } else { 0 };
         let qubit_count = declared_qubits.max(inferred_qubits);
         // declared_results currently unused; could be used in the future for output shape validation
         let _ = declared_results;

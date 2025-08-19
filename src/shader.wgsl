@@ -79,15 +79,6 @@ fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // This will end up being a linear id of all the threads run total (including across workgroups).
     let thread_id = global_id.x + global_id.y * WORKGROUP_SIZE_X;
 
-    // For the first op, the first thread should set the state vector to the initial state.
-    // The other threads should just exit early.
-    if (op.op_idx == 0) {
-        if (thread_id == 0) {
-            stateVec[0] = vec2f(1.0, 0.0); // Set the initial state to |00..00>
-        }
-        return;
-    }
-
     // For the last op, the first thread should scan the probabilities and write the results.
     if (op.op_id == MEVERYZ) {
         scan_probabilities(thread_id);

@@ -6,16 +6,10 @@ use crate::shader_types::{Result, Op};
 use futures::FutureExt;
 use std::num::NonZeroU64;
 use wgpu::{
-    Adapter, BindGroup, BindGroupLayout, Buffer, ComputePipeline, Device, Limits, Queue, ShaderModule
+    Adapter, BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, ComputePipeline, Device, Limits, Queue, ShaderModule
 };
 
 const DO_CAPTURE: bool = true;
-// Make XCODE_TRACABLE true only for macOS builds, else false.
-// This is a workaround for Xcode GPU capture not working with how wgpu handles mappable buffers.
-#[cfg(target_os = "macos")]
-const XCODE_TRACABLE: bool = true;
-#[cfg(not(target_os = "macos"))]
-const XCODE_TRACABLE: bool = false;
 
 pub struct GpuContext {
     device: Device,
@@ -24,9 +18,9 @@ pub struct GpuContext {
     bind_group_layout: BindGroupLayout,
     circuit: Circuit,
     resources: Option<GpuResources>,
-    entries_per_thread: u32,
-    threads_per_workgroup: u32,
-    workgroup_count: u32,
+    entries_per_thread: i32,
+    threads_per_workgroup: i32,
+    workgroup_count: i32,
 }
 
 struct GpuResources {
@@ -41,9 +35,10 @@ struct GpuResources {
 
 impl GpuContext {
     pub async fn new(circuit: Circuit) -> Self {
-        if circuit.qubit_count > 28 {
-            // The maximum buffer size you can request needs to fit in a u32, so we limit the qubit count to 28.
-            // 29 would be 4GB, which is 1 to high :(
+        if circuit.qubit_count > 27 {
+            // wgpu limits buffers to 1GB, which is 2^30 bytes.
+            // As we need 8 bytes (2^3) per complex number, we can only support up to 2^27 state vector entries.
+            // See https://github.com/gfx-rs/wgpu/issues/2337#issuecomment-1549935712
             panic!("Qubit count too high: {}", circuit.qubit_count);
         }
 
@@ -73,11 +68,7 @@ impl GpuContext {
         let (device, queue): (Device, Queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
-                required_features: if XCODE_TRACABLE {
-                    wgpu::Features::MAPPABLE_PRIMARY_BUFFERS
-                } else {
-                    wgpu::Features::empty()
-                },
+                required_features: wgpu::Features::empty(),
                 required_limits: Limits {
                     max_compute_workgroup_size_x: 32,
                     max_compute_workgroups_per_dimension: 65535,
@@ -164,10 +155,10 @@ impl GpuContext {
         }
     }
 
-    pub fn get_params(qubit_count: u32) -> (u32, u32, u32) {
+    pub fn get_params(qubit_count: i32) -> (i32, i32, i32) {
         // Figure out how many threads and threadgroups to use based on the qubit count.
-        const MAX_QUBITS_PER_THREAD: u32 = 10;
-        const MAX_QUBITS_PER_THREADGROUP: u32 = 12;
+        const MAX_QUBITS_PER_THREAD: i32 = 10;
+        const MAX_QUBITS_PER_THREADGROUP: i32 = 12;
         
         if qubit_count < MAX_QUBITS_PER_THREAD {
             // All qubits fit in one thread
@@ -202,13 +193,13 @@ impl GpuContext {
             256,
             "Op struct must be 256 bytes for WebGPU dynamic buffer alignment"
         );
-        let state_vector_entries: u64 = 2u64.pow(self.circuit.qubit_count);
+        let state_vector_entries: u64 = 2u64.pow(self.circuit.qubit_count as u32);
         let result_buffer_size_bytes: u64 = std::mem::size_of::<Result>() as u64 * 100;
 
         let state_vector_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("StateVector Buffer"),
             size: state_vector_entries * 2 * std::mem::size_of::<f32>() as u64, // 2 floats per complex entry
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -302,11 +293,32 @@ impl GpuContext {
     pub async fn run(&self) -> Vec<Result> {
         let resources: &GpuResources = self.resources.as_ref().expect("Resources not initialized");
 
+        // Initialize the first entry of the state vector to |0> (the rest are already zeroed)
+        let state_init_buffer = self.device.create_buffer(&BufferDescriptor {
+            label: Some("State init buffer"),
+            size: std::mem::size_of::<f32>() as u64 * 2,
+            usage: BufferUsages::MAP_WRITE | BufferUsages::COPY_SRC,
+            mapped_at_creation: true,
+        });
+
+        // Upload the ops data and unmap
+        let entry_0: [f32; 2] = [1.0, 0.0]; // Initial state |0>
+        state_init_buffer
+            .slice(..)
+            .get_mapped_range_mut()
+            .copy_from_slice(bytemuck::cast_slice(&entry_0));
+        state_init_buffer.unmap();
+
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("StateVector Command Encoder"),
             });
+
+        // Copy the upload buffers into the state vector and ops buffers on the GPU
+        encoder.copy_buffer_to_buffer(
+            &state_init_buffer, 0, &resources.state_vector_buffer, 0, state_init_buffer.size()
+        );
 
         encoder.copy_buffer_to_buffer(
             &resources.ops_upload_buffer,
@@ -324,7 +336,7 @@ impl GpuContext {
         compute_pass.set_pipeline(&resources.pipeline);
 
         let op_count = self.circuit.ops.len() as u32;
-        let workgroup_count: u32 = self.workgroup_count;
+        let workgroup_count: u32 = self.workgroup_count as u32;
         for i in 0..op_count {
             let op_offset: u32 = i * 256; // Each op is 256 bytes (aligned)
             compute_pass.set_bind_group(0, &resources.bind_group, &[op_offset]);

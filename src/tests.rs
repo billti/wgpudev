@@ -15,7 +15,7 @@ fn load_ising() {
 
     let qubits = circ.qubit_count;
     assert_eq!(qubits, 25, "Expected 25 qubits in the ising circuit");
-    assert_eq!(circ.ops.len(), 477, "Unexpected number of operations in the ising circuit");
+    assert_eq!(circ.ops.len(), 476, "Unexpected number of operations in the ising circuit");
     assert_eq!(circ.ops[1].op_id, RX, "First operation should be RX");
 }
 
@@ -69,12 +69,12 @@ attributes #0 = { "entry_point" "output_labeling_schema" "qir_profiles"="base_pr
         assert_eq!(circ.qubit_count, 2);
         // Expect RESET + 3 ops + MEVERYZ (since an m exists, MEVERYZ is skipped)
         // Here we had an m, so no implicit measure; expect 1 (reset) + 3 ops + 1 m = 5 ops total
-        assert_eq!(circ.ops.len(), 6); // Including the initial reset and final measure all
-        assert_eq!(circ.ops[1].op_id, crate::shader_types::ops::SX);
-        assert_eq!(circ.ops[2].op_id, crate::shader_types::ops::RZ);
-        assert_eq!(circ.ops[2].angle, 0.5);
-        assert_eq!(circ.ops[3].op_id, crate::shader_types::ops::CZ);
-        assert_eq!(circ.ops[4].op_id, crate::shader_types::ops::MZ);
+        assert_eq!(circ.ops.len(), 5); // Including the initial reset and final measure all
+        assert_eq!(circ.ops[0].op_id, crate::shader_types::ops::SX);
+        assert_eq!(circ.ops[1].op_id, crate::shader_types::ops::RZ);
+        assert_eq!(circ.ops[1].angle, 0.5);
+        assert_eq!(circ.ops[2].op_id, crate::shader_types::ops::CZ);
+        assert_eq!(circ.ops[3].op_id, crate::shader_types::ops::MZ);
 }
 
 #[test]
