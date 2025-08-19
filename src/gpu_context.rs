@@ -32,6 +32,7 @@ pub struct GpuContext {
 struct GpuResources {
     pipeline: ComputePipeline,
     state_vector_buffer: Buffer,
+    ops_upload_buffer: Buffer,
     ops_buffer: Buffer,
     results_buffer: Buffer,
     download_buffer: Buffer,
@@ -212,7 +213,7 @@ impl GpuContext {
         });
 
         // Initialize ops buffer from the circuit using bytemuck
-        let ops_buffer = self.circuit.create_ops_buffer(&self.device, XCODE_TRACABLE);
+        let (ops_upload_buffer, ops_buffer) = self.circuit.create_ops_buffers(&self.device);
 
         let results_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Results Buffer"),
@@ -290,6 +291,7 @@ impl GpuContext {
         self.resources = Some(GpuResources {
             pipeline,
             state_vector_buffer,
+            ops_upload_buffer,
             ops_buffer,
             results_buffer,
             download_buffer,
@@ -305,6 +307,14 @@ impl GpuContext {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("StateVector Command Encoder"),
             });
+
+        encoder.copy_buffer_to_buffer(
+            &resources.ops_upload_buffer,
+            0,
+            &resources.ops_buffer,
+            0,
+            resources.ops_buffer.size(),
+        );
 
         let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("StateVector Compute Pass"),

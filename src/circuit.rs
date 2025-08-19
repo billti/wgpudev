@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use wgpu::{Buffer, BufferDescriptor, BufferUsages, Device};
 use crate::shader_types::{Op};
 
 // Small helper enum for QIR arg parsing
@@ -418,32 +419,31 @@ impl Circuit {
         Ok(Circuit { qubit_count, ops: ops_vec })
     }
 
-    pub fn create_ops_buffer(&self, device: &wgpu::Device, xcode_traceable: bool) -> wgpu::Buffer {
-        // This safely treats &[CircuitOp] as &[u8] due to Pod + repr(C)
-        use wgpu::util::DeviceExt;
-        if xcode_traceable {
-            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Ops Buffer"),
-                size: (self.ops.len() * std::mem::size_of::<Op>()) as u64,
-                usage: wgpu::BufferUsages::STORAGE
-                    | wgpu::BufferUsages::MAP_WRITE
-                    | wgpu::BufferUsages::COPY_SRC,
-                mapped_at_creation: true,
-            });
+    pub fn create_ops_buffers(&self, device: &Device) -> (Buffer, Buffer) {
+        let buffer_size: u64 = (self.ops.len() * std::mem::size_of::<Op>()) as u64;
 
-            buffer
-                .slice(..)
-                .get_mapped_range_mut()
-                .copy_from_slice(bytemuck::cast_slice(&self.ops));
+        let ops_upload_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Ops Upload Buffer"),
+            size: buffer_size,
+            usage: BufferUsages::MAP_WRITE | BufferUsages::COPY_SRC,
+            mapped_at_creation: true,
+        });
 
-            buffer.unmap();
-            buffer
-        } else {
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Ops Buffer"),
-                contents: bytemuck::cast_slice(&self.ops),
-                usage: wgpu::BufferUsages::STORAGE,
-            })
-        }
+        // Upload the ops data and unmap
+        ops_upload_buffer
+            .slice(..)
+            .get_mapped_range_mut()
+            .copy_from_slice(bytemuck::cast_slice(&self.ops));
+        ops_upload_buffer.unmap();
+
+        // Create the private GPU buffer to copy the ops buffer into.
+        let ops_buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("Ops Buffer"),
+            size: buffer_size,
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        (ops_upload_buffer, ops_buffer)
     }
 }

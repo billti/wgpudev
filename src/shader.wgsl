@@ -91,7 +91,6 @@ fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     // For the last op, the first thread should scan the probabilities and write the results.
-    // TODO: This hits perf running on a single thread. Look to fan it out.
     if (op.op_id == MEVERYZ) {
         scan_probabilities(thread_id);
         return;
