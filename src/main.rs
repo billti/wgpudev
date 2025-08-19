@@ -12,8 +12,8 @@ use shader_types::{ops, Op};
 mod tests;
 
 fn main() {
-    // let ising_str = include_str!("ising5x5.crc");
-    // let circ = Circuit::from_str(ising_str).unwrap();
+    let ising_str = include_str!("ising5x5.crc");
+    let circ = Circuit::from_str(ising_str).unwrap();
 
 //     let circ = Circuit::from_str("
 // h 0
@@ -131,7 +131,7 @@ attributes #1 = { "irreversible" }
 !2 = !{i32 1, !"dynamic_qubit_management", i1 false}
 !3 = !{i32 1, !"dynamic_result_management", i1 false}
 "#;
-    let circ = Circuit::from_str(qir_bell_pair).expect("Failed to parse QIR circuit");
+    // let circ = Circuit::from_str(qir_bell_pair).expect("Failed to parse QIR circuit");
 
     let result = futures::executor::block_on(async {
         let mut gpu_context = gpu_context::GpuContext::new(circ).await;

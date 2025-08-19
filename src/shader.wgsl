@@ -61,7 +61,7 @@ const M_SQRT1_2  = 0.70710678118654752440084436210484903;  /* 1/sqrt(2) */
 var<storage, read_write> stateVec: array<vec2f>;
 // Circuit ops.  
 @group(0) @binding(1)
-var<storage, read> circuitOps: array<Op>;
+var<storage, read> op: Op;
 
 // Results
 @group(0) @binding(2)
@@ -78,8 +78,6 @@ override QUBIT_COUNT: u32;
 fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // This will end up being a linear id of all the threads run total (including across workgroups).
     let thread_id = global_id.x + global_id.y * WORKGROUP_SIZE_X;
-
-    let op = circuitOps[0];
 
     // For the first op, the first thread should set the state vector to the initial state.
     // The other threads should just exit early.
@@ -103,11 +101,11 @@ fn run_statevector_ops(@builtin(global_invocation_id) global_id: vec3<u32>) {
             return;
         }
         case X, Y, Z, H, S, S_ADJ, T, T_ADJ, SX, SX_ADJ, RX, RY, RZ {
-            apply_1q_op(op, thread_id);
+            apply_1q_op(thread_id);
             return;
         }
         case CX, CZ, RZZ {
-            apply_2q_op(op, thread_id);
+            apply_2q_op(thread_id);
             return;
         }
         default {
@@ -123,15 +121,15 @@ fn cplxmul(a: vec2f, b: vec2f) -> vec2f {
     );
 }
 
-fn apply_1q_op(op: Op, thread_id: u32) {
-    const ITERATIONS: u32 = 1u << (MAX_QUBITS_PER_THREAD - 1);
+fn apply_1q_op(thread_id: u32) {
+    const ITERATIONS: i32 = 1 << (MAX_QUBITS_PER_THREAD - 1);
 
-    let stride: u32 = 1u << op.q1;
-    let thread_start_iteration: u32 = thread_id * ITERATIONS;
+    let stride: i32 = 1 << op.q1;
+    let thread_start_iteration: i32 = i32(thread_id) * ITERATIONS;
 
     // Find the start offset based on the thread and stride
-    var offset: u32 = thread_start_iteration % stride + ((thread_start_iteration / stride) * 2 * stride);
-    let iterations: u32 = select(ITERATIONS, (1u << (QUBIT_COUNT - 1)), QUBIT_COUNT < MAX_QUBITS_PER_THREAD);
+    var offset: i32 = thread_start_iteration % stride + ((thread_start_iteration / stride) * 2 * stride);
+    let iterations: i32 = select(ITERATIONS, (1 << (QUBIT_COUNT - 1)), QUBIT_COUNT < MAX_QUBITS_PER_THREAD);
 
     var coeff1: vec2f = vec2f(0.0, 0.0);
     var coeff2: vec2f = vec2f(0.0, 0.0);
@@ -151,15 +149,15 @@ fn apply_1q_op(op: Op, thread_id: u32) {
             coeff2 = vec2f(cos(op.angle), sin(op.angle));
         }
         case H {
-            coeff1 = vec2f(1.0 / M_SQRT2, 0.0);
-            coeff2 = vec2f(-1.0 / M_SQRT2, 0.0);
+            coeff1 = vec2f(M_SQRT1_2, 0.0);
+            coeff2 = vec2f(-M_SQRT1_2, 0.0);
         }
         default {
             // TODO: Error
         }
     }
 
-    for (var i: u32 = 0; i < iterations; i++) {
+    for (var i: i32 = 0; i < iterations; i++) {
         let entry1 = stateVec[offset + stride];
 
         switch op.op_id {
@@ -208,12 +206,12 @@ fn apply_1q_op(op: Op, thread_id: u32) {
     }
 }
 
-fn apply_2q_op(op: Op, thread_id: u32) {
-    const ITERATIONS: u32 = 1u << (MAX_QUBITS_PER_THREAD - 2); 
+fn apply_2q_op(thread_id: u32) {
+    const ITERATIONS: i32 = 1 << (MAX_QUBITS_PER_THREAD - 2); 
 
-    let iterations: u32 = select(1u << (QUBIT_COUNT - 2), ITERATIONS, QUBIT_COUNT >= MAX_QUBITS_PER_THREAD);
-    let start_count: u32 = thread_id * ITERATIONS;
-    let end_count: u32 = start_count + iterations;
+    let iterations: i32 = select(1 << (QUBIT_COUNT - 2), ITERATIONS, QUBIT_COUNT >= MAX_QUBITS_PER_THREAD);
+    let start_count: i32 = i32(thread_id) * ITERATIONS;
+    let end_count: i32 = start_count + iterations;
 
     // Coefficient only needed for RZZ
     let coeff: vec2f = select(vec2f(0.0), vec2f(cos(op.angle), -sin(op.angle)), op.op_id == RZZ);
@@ -225,28 +223,28 @@ fn apply_2q_op(op: Op, thread_id: u32) {
     let midBitCount = hiQubit - lowQubit - 1;
     let hiBitCount = QUBIT_COUNT - hiQubit - 1;
 
-    let lowMask = (1u << lowBitCount) - 1;
-    let midMask = (1u << (lowBitCount + midBitCount)) - 1 - lowMask;
-    let hiMask = (1u << (lowBitCount + midBitCount + hiBitCount)) - 1 - midMask - lowMask;
+    let lowMask = (1 << lowBitCount) - 1;
+    let midMask = (1 << (lowBitCount + midBitCount)) - 1 - lowMask;
+    let hiMask = (1 << (lowBitCount + midBitCount + hiBitCount)) - 1 - midMask - lowMask;
 
-    for (var i: u32 = start_count; i < end_count; i++) {
+    for (var i: i32 = start_count; i < end_count; i++) {
         switch op.op_id {
             case CX {
                 // q1 is the control, q2 is the target
-                let offset10: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.q1);
-                let offset11: u32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1u << op.q1) | (1u << op.q2);
+                let offset10: i32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1 << op.q1);
+                let offset11: i32 = (i & lowMask) | ((i & midMask) << 1) | ((i & hiMask) << 2) | (1 << op.q1) | (1 << op.q2);
 
                 let old10 = stateVec[offset10];
                 stateVec[offset10] = stateVec[offset11];
                 stateVec[offset11] = old10;
             }
             case CZ {
-                let offset: u32 = (i & lowMask) | (1u << lowQubit) | ((i & midMask) << 1) | (1u << hiQubit) | ((i & hiMask) << 2);
+                let offset: i32 = (i & lowMask) | (1 << lowQubit) | ((i & midMask) << 1) | (1 << hiQubit) | ((i & hiMask) << 2);
                 stateVec[offset] *= -1;
             }
             case RZZ {
-                let offset01: u32 = (i & lowMask) | ((i & midMask) << 1) | (1u << hiQubit) | ((i & hiMask) << 2);
-                let offset10: u32 = (i & lowMask) | (1u << lowQubit) | ((i & midMask) << 1) | ((i & hiMask) << 2);
+                let offset01: i32 = (i & lowMask) | ((i & midMask) << 1) | (1 << hiQubit) | ((i & hiMask) << 2);
+                let offset10: i32 = (i & lowMask) | (1 << lowQubit) | ((i & midMask) << 1) | ((i & hiMask) << 2);
 
                 stateVec[offset01] = cplxmul(stateVec[offset01], coeff);
                 stateVec[offset10] = cplxmul(stateVec[offset10], coeff);
