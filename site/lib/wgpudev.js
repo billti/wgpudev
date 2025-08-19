@@ -212,16 +212,6 @@ function debugString(val) {
     return className;
 }
 /**
- * @param {number} a
- * @param {number} c
- * @returns {number}
- */
-export function add(a, c) {
-    const ret = wasm.add(a, c);
-    return ret;
-}
-
-/**
  * @param {string} code
  * @returns {Promise<any[]>}
  */
@@ -233,11 +223,11 @@ export function run(code) {
 }
 
 function __wbg_adapter_30(arg0, arg1, arg2) {
-    wasm.closure48_externref_shim(arg0, arg1, arg2);
+    wasm.closure49_externref_shim(arg0, arg1, arg2);
 }
 
-function __wbg_adapter_213(arg0, arg1, arg2, arg3) {
-    wasm.closure72_externref_shim(arg0, arg1, arg2, arg3);
+function __wbg_adapter_212(arg0, arg1, arg2, arg3) {
+    wasm.closure73_externref_shim(arg0, arg1, arg2, arg3);
 }
 
 const __wbindgen_enum_GpuBufferBindingType = ["uniform", "storage", "read-only-storage"];
@@ -416,7 +406,7 @@ function __wbg_get_imports() {
                 const a = state0.a;
                 state0.a = 0;
                 try {
-                    return __wbg_adapter_213(a, state0.b, arg0, arg1);
+                    return __wbg_adapter_212(a, state0.b, arg0, arg1);
                 } finally {
                     state0.a = a;
                 }
@@ -686,8 +676,8 @@ function __wbg_get_imports() {
         const ret = false;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper832 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 49, __wbg_adapter_30);
+    imports.wbg.__wbindgen_closure_wrapper834 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 50, __wbg_adapter_30);
         return ret;
     };
     imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {
