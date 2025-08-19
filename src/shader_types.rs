@@ -49,8 +49,3 @@ pub struct Result {
     pub entry_idx: u32,
     pub probability: f32,
 }
-
-fn write_ops_to_buffer(queue: &wgpu::Queue, buffer: &wgpu::Buffer, ops: &[Op]) {
-    // Write the operations to the buffer
-    queue.write_buffer(buffer, 0, bytemuck::cast_slice(ops));
-}
