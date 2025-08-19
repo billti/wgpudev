@@ -37,8 +37,6 @@ impl Circuit {
         let mut ops_vec: Vec<Op> = Vec::new();
         let mut max_qubit: i64 = -1;
 
-        let mut op_idx = 0;
-
         for (lineno, raw_line) in src.lines().enumerate() {
             let line = raw_line.trim();
             if line.is_empty() { continue; }
@@ -161,25 +159,22 @@ impl Circuit {
             }
 
             let op = Op {
-                op_idx,
                 op_id,
                 q1,
                 q2,
                 q3,
                 angle: angle.unwrap_or(0.0),
-                padding: [0; 232],
+                padding: [0; 236],
             };
             ops_vec.push(op);
-            op_idx += 1;
         }
         ops_vec.push(Op {
-            op_idx: op_idx as u32,
             op_id: ops::MEVERYZ, // Implicit measurement at the end of the circuit
             q1: 0,
             q2: 0,
             q3: 0,
             angle: 0.0,
-            padding: [0; 232],
+            padding: [0; 236],
         });
 
         let qubit_count = if max_qubit >= 0 { (max_qubit as i32) + 1 } else { 0 };
@@ -234,7 +229,6 @@ impl Circuit {
         let mut in_entry = false;
         let mut ops_vec: Vec<Op> = Vec::new();
         let mut max_qubit: i64 = -1;
-        let mut op_idx: u32 = 0;
         let mut saw_measure = false;
 
         // Always start with a RESET sentinel op
@@ -386,8 +380,7 @@ impl Circuit {
             max_qubit = max_qubit.max(q2 as i64);
             max_qubit = max_qubit.max(q3 as i64);
 
-            ops_vec.push(Op { op_idx, op_id, q1, q2, q3, angle: angle_val, padding: [0; 232] });
-            op_idx += 1;
+            ops_vec.push(Op { op_id, q1, q2, q3, angle: angle_val, padding: [0; 236] });
         }
 
         if in_entry {
@@ -395,7 +388,7 @@ impl Circuit {
         }
 
         // If no explicit measurements were found, add an implicit measure-every-z at end
-        ops_vec.push(Op { op_idx, op_id: ops::MEVERYZ, q1: 0, q2: 0, q3: 0, angle: 0.0, padding: [0; 232] });
+        ops_vec.push(Op { op_id: ops::MEVERYZ, q1: 0, q2: 0, q3: 0, angle: 0.0, padding: [0; 236] });
 
         // Determine qubit count from declared and observed
         let inferred_qubits = if max_qubit >= 0 { (max_qubit as i32) + 1 } else { 0 };

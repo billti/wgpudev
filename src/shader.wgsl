@@ -33,7 +33,6 @@ const MRESETZ: u32 = 20;
 const MEVERYZ: u32 = 21;
 
 struct Op {
-    op_idx: u32,
     op_id: u32,
     q1: u32,
     q2: u32,

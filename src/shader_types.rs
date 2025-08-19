@@ -34,14 +34,13 @@ pub mod ops {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct Op {
-    pub op_idx: u32, // Ordinal number. We use a 'RESET' on the first op to signal the start of a circuit.
     pub op_id: u32,
     pub q1: u32,
     pub q2: u32,
     pub q3: u32, // For ccx
     pub angle: f32, // For rx, ry, rz, rzz
     // Pad out to 256 butes for WebGPU dynamic buffer alignment
-    pub padding: [u8; 232],
+    pub padding: [u8; 236],
 }
 
 #[repr(C)]
@@ -49,21 +48,6 @@ pub struct Op {
 pub struct Result {
     pub entry_idx: u32,
     pub probability: f32,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Pod, Zeroable)]
-pub struct RunInfo {
-    pub shot_buffer_entries: u32,
-    pub qubit_count: u32,
-    pub shot_count: u32,
-    pub output_states_per_thread: u32,
-    pub threads_per_workgroup: u32,
-    pub workgroups: u32,
-    pub op_count: u32,
-    pub op_index: u32,
-    // Ensure alignment on 64 bytes due to first field being u64
-    pub padding: [u8; 4],
 }
 
 fn write_ops_to_buffer(queue: &wgpu::Queue, buffer: &wgpu::Buffer, ops: &[Op]) {

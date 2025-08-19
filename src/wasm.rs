@@ -7,11 +7,6 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys;
 
 #[wasm_bindgen]
-pub fn add(a: i32, c: i32) -> i32 {
-    a + c
-}
-
-#[wasm_bindgen]
 pub async fn run(code: &str) -> Vec<JsValue> {
     let circ = Circuit::from_str(&code).expect("Failed to parse circuit");
 
